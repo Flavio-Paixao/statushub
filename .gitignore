@@ -1,0 +1,20 @@
+# Executáveis gerados pelo go build
+/statushub
+*.exe
+bin/
+
+# Saída de testes e cobertura
+*.out
+*.test
+
+# Segredos e configurações locais (nunca vão para o repositório)
+.env
+.env.*
+!.env.example
+*.kubeconfig
+
+# Editores e sistema operacional
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
