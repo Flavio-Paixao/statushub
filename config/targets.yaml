@@ -1,0 +1,11 @@
+# Lista de alvos do StatusHub.
+# No Kubernetes, este arquivo vai virar um ConfigMap.
+interval: 30s
+timeout: 5s
+targets:
+  - name: Portfólio do Flávio
+    url: https://flaviopaixao.dev
+  - name: GitHub
+    url: https://github.com
+  - name: Go
+    url: https://go.dev
