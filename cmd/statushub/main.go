@@ -1,43 +1,62 @@
-// Todo programa executável em Go começa no pacote "main".
+// Ponto de entrada do StatusHub: carrega a configuração, liga o verificador
+// e sobe o servidor HTTP, desligando com calma quando recebe SIGTERM.
 package main
 
 import (
-	"log"      // escreve mensagens no terminal (com data e hora)
-	"net/http" // servidor e cliente HTTP da biblioteca padrão
-	"os"       // acesso a variáveis de ambiente
+	"context"
+	"errors"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
+	"github.com/Flavio-Paixao/statushub/internal/checker"
 	"github.com/Flavio-Paixao/statushub/internal/config"
+	"github.com/Flavio-Paixao/statushub/internal/server"
 )
 
 func main() {
-	// O caminho do arquivo vem da variável de ambiente CONFIG_PATH.
-	// No Kubernetes vamos apontar para o ConfigMap montado como arquivo.
 	path := getenv("CONFIG_PATH", "config/targets.yaml")
-
 	cfg, err := config.Load(path)
 	if err != nil {
-		// Fail fast: com configuração errada o serviço nem sobe.
-		log.Fatalf("configuração inválida: %v", err)
+		log.Fatalf("configuração inválida: %v", err) // fail fast
 	}
 	log.Printf("config carregada de %s: %d alvos, intervalo %s, timeout %s",
 		path, len(cfg.Targets), cfg.Interval, cfg.Timeout)
-	for _, t := range cfg.Targets {
-		log.Printf("  - %s (%s)", t.Name, t.URL)
+
+	// ctx é cancelado quando chega Ctrl+C (SIGINT) ou SIGTERM.
+	// O Kubernetes manda SIGTERM antes de matar um Pod.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	chk := checker.New(cfg)
+	go chk.Run(ctx) // "go" roda a função em paralelo (goroutine)
+
+	srv := &http.Server{
+		Addr:              ":" + getenv("PORT", "8080"),
+		Handler:           server.New(chk),
+		ReadHeaderTimeout: 5 * time.Second, // protege contra clientes lentos
 	}
 
-	// ServeMux é o "roteador": decide qual função atende cada caminho.
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", healthz)
+	go func() {
+		log.Printf("StatusHub ouvindo em %s", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("servidor: %v", err)
+		}
+	}()
 
-	addr := ":" + getenv("PORT", "8080")
-	log.Printf("StatusHub ouvindo em %s", addr)
-	log.Fatal(http.ListenAndServe(addr, mux))
-}
+	<-ctx.Done() // fica parado aqui até chegar o sinal de desligar
+	log.Println("desligando...")
 
-// healthz responde se o processo está vivo (liveness).
-func healthz(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("ok\n"))
+	// Dá até 10s para terminar os pedidos em andamento (graceful shutdown).
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("erro no desligamento: %v", err)
+	}
+	log.Println("desligado")
 }
 
 // getenv lê uma variável de ambiente ou devolve o valor padrão.
