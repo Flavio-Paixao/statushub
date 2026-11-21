@@ -1,0 +1,34 @@
+# CI: a cada push ou pull request, confere o código e o build da imagem.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read # o mínimo necessário: só ler o código
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v6
+
+      - name: Instalar o Go (versão lida do go.mod)
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Formatação (gofmt)
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test (com detector de corrida)
+        run: go test -race -v ./...
+
+      - name: docker build
+        run: docker build -t statushub:ci .
