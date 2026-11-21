@@ -16,3 +16,5 @@ data:
         url: https://github.com
       - name: Go
         url: https://go.dev
+      - name: Kubernetes
+        url: https://kubernetes.io
