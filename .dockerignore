@@ -1,0 +1,13 @@
+# O que NÃO vai para dentro do build do Docker.
+.git
+.github
+.vscode
+.idea
+deploy
+docs
+*.md
+*.exe
+/statushub
+bin/
+.env
+.env.*
