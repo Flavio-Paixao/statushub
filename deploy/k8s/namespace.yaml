@@ -1,0 +1,5 @@
+# Namespace: uma "pasta" dentro do cluster só para o StatusHub.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: statushub

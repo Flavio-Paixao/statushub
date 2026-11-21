@@ -1,0 +1,18 @@
+# ConfigMap: guarda a configuração fora da imagem.
+# Mudar os alvos = editar este arquivo, aplicar e reiniciar o rollout. Sem rebuild.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: statushub-config
+  namespace: statushub
+data:
+  targets.yaml: |
+    interval: 30s
+    timeout: 5s
+    targets:
+      - name: Portfólio do Flávio
+        url: https://flaviopaixao.dev
+      - name: GitHub
+        url: https://github.com
+      - name: Go
+        url: https://go.dev

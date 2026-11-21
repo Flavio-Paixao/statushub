@@ -1,0 +1,67 @@
+# Deployment: diz ao Kubernetes "mantenha sempre 2 cópias deste container rodando".
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: statushub
+  namespace: statushub
+  labels:
+    app: statushub
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: statushub # o Deployment cuida dos Pods com esta etiqueta
+  template: # o "molde" de cada Pod
+    metadata:
+      labels:
+        app: statushub
+    spec:
+      securityContext:
+        runAsNonRoot: true # o Kubernetes recusa subir se a imagem tentar rodar como root
+        runAsUser: 65532 # UID numérico do usuário nonroot da distroless (o Kubernetes só confere números)
+        runAsGroup: 65532 # GID numérico do grupo nonroot da distroless
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: statushub
+          image: statushub:0.1.0 # tag fixa; com "latest" o Kind tentaria baixar da internet
+          imagePullPolicy: IfNotPresent # usa a imagem carregada com "kind load"
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: CONFIG_PATH
+              value: /etc/statushub/targets.yaml # onde o ConfigMap aparece como arquivo
+          volumeMounts:
+            - name: config
+              mountPath: /etc/statushub
+              readOnly: true
+          readinessProbe: # "posso receber tráfego?" Se falhar, o Service para de mandar pedidos.
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe: # "estou vivo?" Se falhar 3 vezes, o Kubernetes reinicia o container.
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests: # o mínimo reservado para o Pod (usado para escolher o nó)
+              cpu: 50m # 50 milicores = 5% de um núcleo
+              memory: 32Mi
+            limits: # o máximo; passou da memória, o container é morto (OOMKilled)
+              cpu: 200m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: config
+          configMap:
+            name: statushub-config

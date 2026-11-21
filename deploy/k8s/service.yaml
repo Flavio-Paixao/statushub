@@ -1,0 +1,14 @@
+# Service: um endereço fixo que distribui os pedidos entre os Pods prontos.
+apiVersion: v1
+kind: Service
+metadata:
+  name: statushub
+  namespace: statushub
+spec:
+  type: ClusterIP # só acessível de dentro do cluster (usamos port-forward para testar)
+  selector:
+    app: statushub
+  ports:
+    - name: http
+      port: 80 # porta do Service
+      targetPort: http # porta "http" do container (8080)
