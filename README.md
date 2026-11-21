@@ -1,118 +1,74 @@
-# ⛽ Painel de Combustíveis no Brasil
+# StatusHub
 
-[![Streamlit App](https://img.shields.io/badge/Streamlit-Live-FF6600?style=flat-square&logo=streamlit&logoColor=white)](https://combustiveis-brasil-anp-gu8tg5fercq66pecnwfyp6.streamlit.app/)
-[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
-[![Pandas](https://img.shields.io/badge/Pandas-2.x-150458?style=flat-square&logo=pandas&logoColor=white)](https://pandas.pydata.org)
-[![Plotly](https://img.shields.io/badge/Plotly-Interactive-3F4F75?style=flat-square&logo=plotly&logoColor=white)](https://plotly.com)
-[![ANP](https://img.shields.io/badge/Fonte-ANP%20Dados%20Abertos-22C55E?style=flat-square)](https://www.gov.br/anp)
+![CI](https://github.com/Flavio-Paixao/statushub/actions/workflows/ci.yml/badge.svg)
 
-> Dashboard interativo para análise exploratória dos preços de revenda de combustíveis no Brasil, com dados oficiais da Agência Nacional do Petróleo (ANP) — série histórica semanal por estado de 2012 a 2026.
+Serviço pequeno em **Go** que verifica, de tempos em tempos, se uma lista de sites e APIs está no ar
+e mostra o resultado numa página HTML e em JSON. Empacotado com **Docker** (multi-stage, distroless,
+não-root) e rodando em **Kubernetes** local (Kind) com 2 réplicas, probes, limites e ConfigMap.
 
----
+✅ Projeto concluído (Fases 0 a 6).
 
-## 🚀 Demo ao vivo
+## O que ele faz
 
-**[→ Acessar o dashboard](https://combustiveis-brasil-anp-gu8tg5fercq66pecnwfyp6.streamlit.app/)**
-
----
-
-## 📊 O que o dashboard analisa
-
-| Seção | Descrição |
+| Rota | O que mostra |
 |---|---|
-| **Visão Geral (KPIs)** | Preço médio, mínimo, máximo e total de registros no período filtrado |
-| **Preço por Estado** | Ranking de todos os estados ordenado do mais barato ao mais caro |
-| **Série Histórica** | Evolução do preço médio nacional de 2012 a 2026 |
-| **Regra dos 70%** | Comparativo econômico Etanol vs Gasolina por estado |
-| **Comparativo Regional** | Evolução de preços por região ao longo dos anos |
-| **Top 5 Ranking** | Os 5 estados mais baratos e os 5 mais caros |
+| `GET /` | Página HTML com cada alvo: no ar / fora do ar, código HTTP e tempo de resposta |
+| `GET /api/status` | O mesmo em JSON |
+| `GET /healthz` | Liveness: "estou vivo" |
+| `GET /readyz` | Readiness: 503 até a primeira rodada de verificação, depois 200 |
 
----
+A lista de alvos, o intervalo (30s) e o timeout (5s) vêm de um arquivo YAML, que no Kubernetes é um ConfigMap.
 
-## 💡 Por que esse projeto?
+## Destaques
 
-Trabalhei como motorista de aplicativo e sempre precisei tomar decisões sobre combustível: abastecer com etanol ou gasolina? Em qual estado o preço compensa mais? Esse dashboard responde essas perguntas com dados reais da ANP.
+- Verificação em paralelo com goroutines, timeout por alvo e resultados protegidos por `sync.RWMutex`.
+- Graceful shutdown: ao receber SIGTERM, termina os pedidos em andamento antes de sair.
+- Imagem Docker de **4,88 MB compactada** (20,4 MB no disco), sem shell, rodando como UID 65532.
+- Deployment com 2 réplicas, readiness e liveness probes, requests/limits e `securityContext` restrito (não-root, disco somente leitura, sem capabilities).
+- Operação praticada: escalar, autocura, mudança de ConfigMap com `rollout restart` e rollback de um deploy quebrado sem derrubar o serviço.
+- CI no GitHub Actions: `gofmt`, `go vet`, `go test -race` e `docker build` a cada push.
 
-A **Regra dos 70%** é o insight central: se o preço do etanol for menor que 70% do preço da gasolina, o etanol é mais econômico por quilômetro rodado. O dashboard identifica automaticamente quais estados estão abaixo ou acima desse limiar.
+## Stack
 
----
+Go (biblioteca padrão + `go.yaml.in/yaml/v3`) · Docker · Kind · kubectl · GitHub Actions
 
-## 🛠️ Stack
+## Como rodar
 
-```
-Python 3.11+
-├── pandas          → limpeza e análise dos dados
-├── plotly          → gráficos interativos
-├── streamlit       → dashboard web
-└── requests        → carregamento dos dados via URL
-```
-
-**Dados:** ANP — Série Histórica Semanal por Estado (2012–2026)  
-**Deploy:** Streamlit Cloud (CI/CD automático via GitHub)
-
----
-
-## 📁 Estrutura do projeto
-
-```
-combustiveis-brasil-anp/
-├── app.py                          # Dashboard Streamlit
-├── dados_anp.csv                   # Dataset limpo (114k registros)
-├── requirements.txt                # Dependências Python
-├── .streamlit/
-│   └── config.toml                 # Tema dark forçado
-└── README.md
-```
-
----
-
-## ⚙️ Como rodar localmente
+Passo a passo completo no [RUNBOOK](docs/RUNBOOK.md). Resumo:
 
 ```bash
-# 1. Clone o repositório
-git clone https://github.com/Flavio-Paixao/combustiveis-brasil-anp.git
-cd combustiveis-brasil-anp
-
-# 2. Instale as dependências
-pip install -r requirements.txt
-
-# 3. Rode o dashboard
-streamlit run app.py
+docker build -t statushub:0.1.0 .
+kind create cluster --name statushub
+kind load docker-image statushub:0.1.0 --name statushub
+kubectl apply -f deploy/k8s/namespace.yaml
+kubectl apply -f deploy/k8s/
+kubectl port-forward -n statushub svc/statushub 8081:80
 ```
 
----
+Depois abra http://localhost:8081.
 
-## 📦 Fonte dos dados
+Sem Kubernetes, só com Go: `go run ./cmd/statushub` e abra http://localhost:8080.
 
-Os dados são provenientes da **ANP — Agência Nacional do Petróleo, Gás Natural e Biocombustíveis**, disponíveis publicamente em:
+## Documentação
 
-🔗 [Série Histórica do Levantamento de Preços](https://www.gov.br/anp/pt-br/assuntos/precos-e-defesa-da-concorrencia/precos/precos-revenda-e-de-distribuicao-combustiveis/serie-historica-do-levantamento-de-precos)
+- [Arquitetura](docs/ARCHITECTURE.md): diagrama e componentes.
+- [Decisões](docs/DECISIONS.md): o porquê de cada escolha, o que descartei e do que abri mão.
+- [Runbook](docs/RUNBOOK.md): subir, testar, mudar alvos, rollback, problemas comuns e derrubar.
 
-**Combustíveis disponíveis no dataset:**
-- Gasolina Comum e Aditivada
-- Etanol Hidratado
-- Óleo Diesel e Diesel S10
-- GLP (Gás de Cozinha)
-- GNV
+## Estrutura
 
----
+```
+cmd/statushub/       ponto de entrada (main.go)
+internal/config/     leitura e validação do YAML
+internal/checker/    verificador periódico
+internal/server/     rotas HTTP
+config/targets.yaml  alvos para rodar localmente
+deploy/k8s/          namespace, configmap, deployment, service
+docs/                arquitetura, decisões e runbook
+Dockerfile           build multi-stage com distroless
+.github/workflows/   CI
+```
 
-## 🗺️ Próximos projetos da série
+## Autor
 
-Este é o **Projeto 1** de uma série temática sobre mobilidade e energia no Brasil:
-
-| # | Projeto | Stack | Status |
-|---|---|---|---|
-| 1 | **Painel de Combustíveis ANP** | Python · Pandas · Plotly · Streamlit | ✅ Live |
-| 2 | Dashboard de Mobilidade Urbana SP | Python · Streamlit · Mapbox | 🔧 Em breve |
-| 3 | ML: Previsão de Preço de Combustível | Scikit-learn · Random Forest | 🔧 Em breve |
-
----
-
-## 👤 Autor
-
-**Flávio Paixão** — Backend Developer · AWS Cloud · Data Analytics
-
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-flaviopx-0A66C2?style=flat-square&logo=linkedin)](https://linkedin.com/in/flaviopx)
-[![GitHub](https://img.shields.io/badge/GitHub-Flavio--Paixao-181717?style=flat-square&logo=github)](https://github.com/Flavio-Paixao)
-[![Instagram](https://img.shields.io/badge/Instagram-flaviopaixao.dev-E4405F?style=flat-square&logo=instagram)](https://instagram.com/flaviopaixao.dev)
+Flávio Paixão · [flaviopaixao.dev](https://flaviopaixao.dev)
